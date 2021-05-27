@@ -1,0 +1,86 @@
+// Clear data
+MATCH (n)
+DETACH DELETE n;
+
+//Listings
+LOAD CSV WITH HEADERS FROM 'file:///listings.csv' AS row
+CREATE
+ (l:Listing {listingkey: row.listingkey, listingnumber: toInteger(row.listingnumber), status: row.status, creditgrade: row.creditgrade, amount: toInteger(row.amount), startdate:LEFT(row.startdate,10), enddate: LEFT(row.enddate,10)});
+
+//Index
+CREATE INDEX listing_idx IF NOT EXISTS FOR (li:Listing) ON (li.listingkey);
+
+//Create Members
+LOAD CSV WITH HEADERS FROM 'file:///members.csv' AS row
+WITH row WHERE NOT (row.role CONTAINS 'Lender') AND NOT (row.role CONTAINS 'Borrower')
+CREATE (m:Member {memberkey: row.memberkey, name: row.name, state: row.state})
+;
+
+//Create Members
+LOAD CSV WITH HEADERS FROM 'file:///members.csv' AS row
+WITH row WHERE (row.role CONTAINS 'Lender') AND NOT (row.role CONTAINS 'Borrower')
+CREATE (m:Member:Lender {memberkey: row.memberkey, name: row.name, state: row.state})
+;
+
+//Create Members
+LOAD CSV WITH HEADERS FROM 'file:///members.csv' AS row
+WITH row WHERE NOT (row.role CONTAINS 'Lender') AND (row.role CONTAINS 'Borrower')
+CREATE (m:Member:Borrower {memberkey: row.memberkey, name: row.name, state: row.state})
+;
+
+//Create Members
+LOAD CSV WITH HEADERS FROM 'file:///members.csv' AS row
+WITH row WHERE (row.role CONTAINS 'Lender') AND (row.role CONTAINS 'Borrower')
+CREATE (m:Member:Borrower:Lender {memberkey: row.memberkey, name: row.name, state: row.state})
+;
+
+//Index
+CREATE INDEX member_idx IF NOT EXISTS FOR (m:Member) ON (m.memberkey);
+
+//Create relationship
+LOAD CSV WITH HEADERS FROM 'file:///listings.csv' AS row
+MATCH (l:Listing {listingkey: row.listingkey})
+MATCH (m:Member {memberkey: row.memberkey})
+MERGE (m)-[:OWNS]->(l);
+
+//Create relationship bid
+LOAD CSV WITH HEADERS FROM 'file:///bids.csv' AS row
+MATCH (m:Member {memberkey: row.memberkey})
+MATCH (l:Listing {listingkey: row.listingkey})
+MERGE (m)-[:BIDS_ON {amount: toInteger(row.amount), status: row.status, biddate: LEFT(row.biddate,10)}] ->  (l);
+
+//Friendkeys
+LOAD CSV WITH HEADERS FROM 'file:///friends.csv' AS row
+MATCH (m:Member{memberkey: row.memberkey})
+MATCH (f:Member{memberkey: row.friendkey})
+MERGE (m) -[:FRIENDS_WITH]-> (f);
+
+//Groups
+LOAD CSV WITH HEADERS FROM 'file:///groups.csv' AS row
+CREATE (g:Group {groupkey: row.groupkey, grouprating: row.grouprating, shortname: row.shortname});
+
+//Loans
+LOAD CSV WITH HEADERS FROM 'file:///loans.csv' AS row
+CREATE (lo:Loan {loankey: row.loankey, borrowerrate: toFloat(row.borrowerrate), creditgrade:row.creditgrade, creationdate: LEFT(row.creationdate,10), status: row.status, amountborrower: toInteger(row.amountborrowed)});
+
+//Loan-Listing
+LOAD CSV WITH HEADERS FROM 'file:///loans.csv' AS row
+MATCH (lo:Loan {loankey: row.loankey})
+MATCH (li:Listing {listingkey: row.listingkey})
+CREATE (li) -[:BECOMES]-> (lo);
+
+//Loans
+LOAD CSV WITH HEADERS FROM 'file:///loans.csv' AS row
+MATCH (lo:Loan {loankey: row.loankey})
+MATCH (g:Group {groupkey: row.groupkey})
+CREATE (lo) -[:BELONGS_TO]-> (g);
+
+//Listings
+LOAD CSV WITH HEADERS FROM 'file:///listings.csv' AS row
+MATCH (l:Listing {listingkey: row.listingkey})
+MATCH (g:Group {groupkey: row.groupkey})
+CREATE (l) -[:BELONGS_TO]-> (g);
+
+
+
+
